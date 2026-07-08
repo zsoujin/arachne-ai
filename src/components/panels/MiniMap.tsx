@@ -1,10 +1,12 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Map } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { hazards } from "@/data/mockData";
 import { useSimulation } from "@/state/SimulationContext";
 
 export function MiniMap() {
-  const { robotPos, trail, hazardsVisible, survivorConfirmed, survivorLocation } = useSimulation();
+  const { robotPos, trail, hazardsVisible, survivorConfirmed, survivorLocation, missionRunning } =
+    useSimulation();
 
   const trailD = trail.length > 1
     ? trail.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x},${p.y}`).join(" ")
@@ -61,7 +63,14 @@ export function MiniMap() {
 
             {/* robot position, live */}
             <g transform={`translate(${robotPos.x},${robotPos.y})`}>
-              <circle r="4.2" fill="none" stroke="#6f97cd" strokeWidth="0.5" opacity="0.5" className="animate-ping" />
+              <circle
+                r="4.2"
+                fill="none"
+                stroke="#6f97cd"
+                strokeWidth="0.5"
+                opacity="0.5"
+                className={cn(missionRunning && "animate-ping")}
+              />
               <circle r="3.2" fill="#4576b822" stroke="#6f97cd" strokeWidth="0.6" />
               <circle r="1.1" fill="#9dbadf" />
             </g>

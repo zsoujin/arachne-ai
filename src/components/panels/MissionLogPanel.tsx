@@ -24,7 +24,8 @@ const typeMeta: Record<
 };
 
 export function MissionLogPanel() {
-  const { missionLog, aiThinking, newEntryId, revealedIds, markRevealed } = useSimulation();
+  const { missionLog, aiThinking, newEntryId, revealedIds, markRevealed, missionRunning } =
+    useSimulation();
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-border bg-base-900/50 lg:h-full lg:w-[360px] lg:border-l">
@@ -35,9 +36,19 @@ export function MissionLogPanel() {
             Mission Log &middot; AI Reasoning
           </h2>
         </div>
-        <span className="flex items-center gap-1.5 font-mono text-[10px] text-moss-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-moss-400 animate-pulse-dot" />
-          LIVE
+        <span
+          className={cn(
+            "flex items-center gap-1.5 font-mono text-[10px]",
+            missionRunning ? "text-moss-400" : "text-ink-500"
+          )}
+        >
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              missionRunning ? "bg-moss-400 animate-pulse-dot" : "bg-ink-600"
+            )}
+          />
+          {missionRunning ? "LIVE" : "STOPPED"}
         </span>
       </div>
 

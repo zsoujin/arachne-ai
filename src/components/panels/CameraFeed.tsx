@@ -185,6 +185,7 @@ export function CameraFeed() {
     sensorOcclusion,
     signalLevel,
     signalDbm,
+    missionComplete,
   } = useSimulation();
   const [mode, setMode] = useState<"visual" | "thermal">("visual");
   const [localGlitch, setLocalGlitch] = useState(false);
@@ -240,6 +241,19 @@ export function CameraFeed() {
     return () => clearInterval(id);
   }, [showFeed]);
 
+  // Once the mission is complete, forcibly pin playback to the last frame
+  // at its final confidence value. This guarantees the feed freezes on a
+  // real image/overlay state instead of relying on timing coincidences
+  // between the camera's own 8s-per-frame playback and the overall
+  // mission timeline finishing.
+  useEffect(() => {
+    if (!missionComplete) return;
+    setFrameIndex(missionFrames.length - 1);
+    setFrameElapsed(FRAME_DURATION_MS);
+    setPlaybackDone(true);
+    setLocalGlitch(false);
+  }, [missionComplete]);
+
   const currentScript = frameScript[frameIndex];
   const activeLog =
     [...currentScript.logs].reverse().find((l) => l.atMs <= frameElapsed) ?? currentScript.logs[0];
@@ -254,8 +268,9 @@ export function CameraFeed() {
   // Occasional signal interference, independent of any single upstream
   // system: brief static/glitch bursts every ~6-15s, on top of whatever the
   // simulation's own sensor-occlusion / weak-signal state is doing.
+  // Stops scheduling entirely once the mission is complete.
   useEffect(() => {
-    if (!showFeed) return;
+    if (!showFeed || missionComplete) return;
     let hideId: ReturnType<typeof setTimeout>;
     let showId: ReturnType<typeof setTimeout>;
 
@@ -275,9 +290,12 @@ export function CameraFeed() {
       clearTimeout(showId);
       clearTimeout(hideId);
     };
-  }, [showFeed]);
+  }, [showFeed, missionComplete]);
 
-  const interference = localGlitch || sensorOcclusion || signalLevel <= 2;
+  // All animated overlays (glitch bars, interference badge, noise grain)
+  // freeze once the mission has finished, regardless of what the
+  // underlying signal/occlusion state happened to be at that instant.
+  const interference = !missionComplete && (localGlitch || sensorOcclusion || signalLevel <= 2);
   const frameCount = Math.floor(elapsedSeconds * 24);
 
   return (
@@ -394,14 +412,21 @@ export function CameraFeed() {
                 }}
               />
 
-              {/* Animated sensor grain */}
-              {mode === "visual" && <NoiseLayer intensity={interference ? 0.18 : 0.07} />}
+              {/* Animated sensor grain — stilled once the mission is complete */}
+              {mode === "visual" && (
+                <NoiseLayer intensity={missionComplete ? 0 : interference ? 0.18 : 0.07} />
+              )}
 
               {/* Static scanline texture */}
               <div className="scanlines absolute inset-0 opacity-60" />
 
-              {/* Slow moving scan sweep */}
-              <div className="absolute inset-y-0 left-0 w-full animate-scan bg-gradient-to-b from-transparent via-steel-400/[0.03] to-transparent" />
+              {/* Slow moving scan sweep — stopped once the mission is complete */}
+              <div
+                className={cn(
+                  "absolute inset-y-0 left-0 w-full bg-gradient-to-b from-transparent via-steel-400/[0.03] to-transparent",
+                  !missionComplete && "animate-scan"
+                )}
+              />
 
               {/* Interference glitch bars */}
               {interference && (
@@ -430,7 +455,8 @@ export function CameraFeed() {
                 className={cn(
                   "absolute rounded-[3px] border-[1.5px] transition-all duration-500 animate-fade-in",
                   detection.style,
-                  detection.locked && "bracket-corners animate-lock-pulse"
+                  detection.locked && "bracket-corners",
+                  detection.locked && !missionComplete && "animate-lock-pulse"
                 )}
                 style={{
                   left: `${detection.box.x}%`,
@@ -451,18 +477,36 @@ export function CameraFeed() {
               </div>
             )}
 
-            {/* Mission event caption, synchronized with the frame/log script */}
-            <div className="absolute inset-x-0 bottom-14 flex justify-start px-3">
-              <div
-                key={`${frameIndex}-${activeLog.message}`}
-                className="animate-fade-in rounded-md bg-base-950/70 px-2.5 py-1 font-mono text-[11px] tracking-wide text-steel-300 backdrop-blur-sm"
-              >
-                {activeLog.message}
-                {playbackDone && frameIndex === missionFrames.length - 1 && (
-                  <span className="ml-2 text-ink-500">&middot; playback complete</span>
-                )}
+            {/* Mission event caption, synchronized with the frame/log script.
+                Once the mission is complete this is replaced by a persistent
+                completion banner — the last frame stays visible behind it. */}
+            {missionComplete ? (
+              <div className="absolute inset-x-0 bottom-14 flex justify-center px-3">
+                <div className="animate-fade-in rounded-lg border border-moss-500/40 bg-base-950/85 px-4 py-2.5 text-center backdrop-blur-sm">
+                  <p className="font-mono text-[13px] font-semibold tracking-[0.12em] text-moss-400">
+                    MISSION COMPLETE
+                  </p>
+                  <p className="mt-1 text-[11.5px] leading-snug text-ink-200">
+                    Robot awaiting operator instructions.
+                  </p>
+                  <p className="text-[11.5px] leading-snug text-ink-400">
+                    Mission successfully finished.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="absolute inset-x-0 bottom-14 flex justify-start px-3">
+                <div
+                  key={`${frameIndex}-${activeLog.message}`}
+                  className="animate-fade-in rounded-md bg-base-950/70 px-2.5 py-1 font-mono text-[11px] tracking-wide text-steel-300 backdrop-blur-sm"
+                >
+                  {activeLog.message}
+                  {playbackDone && frameIndex === missionFrames.length - 1 && (
+                    <span className="ml-2 text-ink-500">&middot; playback complete</span>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -474,11 +518,18 @@ export function CameraFeed() {
                 <Circle
                   className={cn(
                     "h-2 w-2",
-                    showFeed ? "fill-rose-500 text-rose-500 animate-pulse-dot" : "fill-ink-600 text-ink-600"
+                    showFeed && !missionComplete
+                      ? "fill-rose-500 text-rose-500 animate-pulse-dot"
+                      : "fill-ink-600 text-ink-600"
                   )}
                 />
-                <span className={cn("font-mono text-[11px] tracking-wide", showFeed ? "text-rose-400" : "text-ink-600")}>
-                  REC
+                <span
+                  className={cn(
+                    "font-mono text-[11px] tracking-wide",
+                    showFeed && !missionComplete ? "text-rose-400" : "text-ink-600"
+                  )}
+                >
+                  {showFeed && missionComplete ? "END" : "REC"}
                 </span>
               </div>
               <div className="rounded-md bg-base-950/70 px-2 py-1 font-mono text-[11px] text-ink-300 backdrop-blur-sm tabular-nums">

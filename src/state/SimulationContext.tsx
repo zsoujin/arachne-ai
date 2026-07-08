@@ -38,6 +38,7 @@ interface PrimaryDetection {
 interface SimulationState {
   missionStatus: MissionStatus;
   missionRunning: boolean;
+  missionComplete: boolean;
   startMission: () => void;
   haltMission: (reason: "stop" | "return-home" | "emergency") => void;
 
@@ -236,6 +237,17 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [missionRunning]);
 
+  // Safety net: the camera link must never be left stuck on the boot
+  // sequence (or dropped back to idle) once the mission has finished.
+  // Whatever stage it was in when the final timeline step lands, force it
+  // to "online" so the last frame stays on screen instead of the feed
+  // going blank.
+  useEffect(() => {
+    if (missionStatus === "complete") {
+      setCameraStage("online");
+    }
+  }, [missionStatus]);
+
   useEffect(() => {
     const id = setInterval(() => {
       setBattery((b) => Math.max(11, +(b - (missionRunning ? 0.25 : 0.03)).toFixed(1)));
@@ -344,6 +356,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const value: SimulationState = {
     missionStatus,
     missionRunning,
+    missionComplete: missionStatus === "complete",
     startMission,
     haltMission,
     cameraStage,

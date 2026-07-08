@@ -1,11 +1,12 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { BarChart3, Footprints, Users, Boxes, Clock } from "lucide-react";
-import { formatDuration } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import { useSimulation } from "@/state/SimulationContext";
 
 export function MissionStats() {
-  const { distanceKm, victimsFound, objectsDetected, elapsedSeconds, coverage } = useSimulation();
+  const { distanceKm, victimsFound, objectsDetected, elapsedSeconds, coverage, missionRunning } =
+    useSimulation();
 
   const stats = [
     { icon: Footprints, label: "Distance Traveled", value: distanceKm.toFixed(2), unit: "km" },
@@ -20,9 +21,19 @@ export function MissionStats() {
         <CardTitle className="flex items-center gap-1.5">
           <BarChart3 className="h-3.5 w-3.5" /> Mission Statistics
         </CardTitle>
-        <span className="flex items-center gap-1.5 font-mono text-[10px] text-moss-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-moss-400 animate-pulse-dot" />
-          LIVE
+        <span
+          className={cn(
+            "flex items-center gap-1.5 font-mono text-[10px]",
+            missionRunning ? "text-moss-400" : "text-ink-500"
+          )}
+        >
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              missionRunning ? "bg-moss-400 animate-pulse-dot" : "bg-ink-600"
+            )}
+          />
+          {missionRunning ? "LIVE" : "STOPPED"}
         </span>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-3">
