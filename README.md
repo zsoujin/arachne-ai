@@ -1,32 +1,64 @@
-# React + TypeScript + Vite
+# Arachne AI — Field Console
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A command-and-control frontend for the Arachne AI autonomous disaster-response
+hexapod. Built for rescue operators to monitor the robot's live feed, review
+AI reasoning, track detected survivors and hazards, and issue mission
+commands.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 18 + TypeScript
+- Vite
+- Tailwind CSS
+- shadcn/ui-style primitives (Radix UI under the hood)
+- lucide-react icons
 
-## React Compiler
+## Getting started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Then open the printed local URL (default `http://localhost:5173`).
+
+## Project structure
+
+```
+src/
+  components/
+    layout/     TopNav, Sidebar
+    panels/     CameraFeed, MiniMap, RobotHealth, MissionStats,
+                MissionLogPanel, CommandBar
+    ui/         Reusable shadcn-style primitives (Button, Card, Badge, ...)
+  data/         Example mission data
+  hooks/        Live clock / mission timer hooks
+  types/        Shared TypeScript types
+```
+
+## Live simulation
+
+There is no backend. All "live" behavior is simulated entirely on the
+frontend from `src/state/SimulationContext.tsx`, which drives:
+
+- Battery drain, signal strength/dBm drift, CPU/temperature jitter
+- Occasional robot status flicker (operational \u2192 degraded \u2192 recovers)
+- Motor leg status flips
+- Mission coverage %, distance traveled, and objects/victims counters
+- The robot's minimap position, eased along a waypoint loop every tick
+- A streaming mission log: new reasoning/detection/navigation/system/alert
+  entries arrive every few seconds from message pools in
+  `src/data/simulationPool.ts`
+- An "AI analyzing\u2026" thinking indicator before reasoning entries land,
+  followed by a typewriter reveal of the new log line
+- Transient camera detections that blip onto the live feed and fade out
+
+Everything is driven by `setInterval`/`setTimeout` inside the provider and
+consumed via the `useSimulation()` hook \u2014 no network calls involved.
+
+## Design notes
+
+Dark, grayscale-first industrial palette with a restrained steel-blue accent
+(`#4576b8` family), IBM Plex Sans for UI text and IBM Plex Mono for
+telemetry/data. The camera panel uses viewfinder-style corner brackets as the
+console's signature detail, echoing the robot's own vision system.

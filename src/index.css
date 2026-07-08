@@ -2,27 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-html, body, #root {
-  height: 100%;
-  background-color: #0a0a0b;
-  color: #e4e4e7;
-  font-family: 'Inter', sans-serif;
-  overflow: hidden;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-base-950 text-ink-200 antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: rgba(69, 118, 184, 0.35);
+  }
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #2a2a2e;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3e;
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #262b32 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #262b32;
+    border-radius: 999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .bracket-corners {
+    position: relative;
+  }
+  .bracket-corners::before,
+  .bracket-corners::after,
+  .bracket-corners > .bc-tr,
+  .bracket-corners > .bc-bl {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .bracket-corners::before {
+    top: 10px;
+    left: 10px;
+    border-top: 1.5px solid rgba(157, 186, 223, 0.55);
+    border-left: 1.5px solid rgba(157, 186, 223, 0.55);
+  }
+  .bracket-corners::after {
+    bottom: 10px;
+    right: 10px;
+    border-bottom: 1.5px solid rgba(157, 186, 223, 0.55);
+    border-right: 1.5px solid rgba(157, 186, 223, 0.55);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #15181d 0%,
+      #1c2026 40%,
+      #15181d 80%
+    );
+    background-size: 800px 100%;
+    @apply animate-shimmer;
+  }
+
+  .text-shadow-glow {
+    text-shadow: 0 0 12px rgba(69, 118, 184, 0.5);
+  }
 }
