@@ -10,7 +10,7 @@ Built during the **Cursor Physical AI Hackathon 2026**.
 
 ## Live Demo
 
-https://your-project.vercel.app
+https://arachne-ai.vercel.app
 
 ---
 
