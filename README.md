@@ -8,6 +8,12 @@ Built during the **Cursor Physical AI Hackathon 2026**.
 
 ---
 
+## Live Demo
+
+https://your-project.vercel.app
+
+---
+
 ## Overview
 
 Arachne AI demonstrates how multimodal AI can be integrated into a robotic search-and-rescue workflow.
