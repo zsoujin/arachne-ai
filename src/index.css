@@ -78,4 +78,16 @@
   .text-shadow-glow {
     text-shadow: 0 0 12px rgba(69, 118, 184, 0.5);
   }
+
+  .scanlines {
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.045) 0px,
+      rgba(255, 255, 255, 0.045) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    mix-blend-mode: overlay;
+  }
 }

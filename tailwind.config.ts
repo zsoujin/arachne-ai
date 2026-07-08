@@ -88,6 +88,13 @@ export default {
           "55%": { transform: "scale(0.98)", opacity: "1" },
           "100%": { transform: "scale(1)", opacity: "1" },
         },
+        glitch: {
+          "0%, 100%": { transform: "translate(0, 0)" },
+          "20%": { transform: "translate(-2px, 1px)" },
+          "40%": { transform: "translate(2px, -1px)" },
+          "60%": { transform: "translate(-1px, 0)" },
+          "80%": { transform: "translate(1px, 1px)" },
+        },
       },
       animation: {
         "pulse-dot": "pulse-dot 1.6s ease-in-out infinite",
@@ -95,6 +102,7 @@ export default {
         "fade-in": "fade-in 0.25s ease-out",
         shimmer: "shimmer 1.6s infinite linear",
         "lock-pulse": "lock-pulse 0.55s cubic-bezier(0.34,1.56,0.64,1)",
+        glitch: "glitch 0.12s steps(2, end) infinite",
       },
     },
   },
