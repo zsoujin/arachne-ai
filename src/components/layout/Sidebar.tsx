@@ -11,19 +11,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import {
-  missionQueue,
-  survivors,
-  hazards,
-  missionHistory,
-} from "@/data/mockData";
+import { missionQueue, hazards, missionHistory } from "@/data/mockData";
+import { useSimulation } from "@/state/SimulationContext";
+import { SafetyPanel } from "@/components/panels/SafetyPanel";
 
-const NAV: { id: string; label: string; icon: ElementType; count?: number }[] = [
+const NAV: { id: string; label: string; icon: ElementType }[] = [
   { id: "mission-control", label: "Mission Control", icon: Radar },
-  { id: "mission-queue", label: "Mission Queue", icon: ListChecks, count: missionQueue.length },
+  { id: "mission-queue", label: "Mission Queue", icon: ListChecks },
   { id: "navigation", label: "Navigation", icon: Compass },
-  { id: "survivors", label: "Detected Survivors", icon: Users, count: survivors.length },
-  { id: "hazards", label: "Detected Hazards", icon: TriangleAlert, count: hazards.length },
+  { id: "survivors", label: "Detected Survivors", icon: Users },
+  { id: "hazards", label: "Detected Hazards", icon: TriangleAlert },
   { id: "history", label: "Mission History", icon: History },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -34,12 +31,21 @@ interface SidebarProps {
 }
 
 export function Sidebar({ active, onSelect }: SidebarProps) {
+  const { survivorConfirmed, hazardsVisible } = useSimulation();
+
+  const counts: Record<string, number> = {
+    "mission-queue": missionQueue.length,
+    survivors: survivorConfirmed ? 1 : 0,
+    hazards: hazardsVisible.length,
+  };
+
   return (
     <aside className="flex w-full shrink-0 flex-col border-border bg-base-900/50 lg:h-full lg:w-64 lg:border-r">
       <nav className="flex flex-col gap-0.5 p-2.5">
         {NAV.map((item) => {
           const isActive = active === item.id;
           const Icon = item.icon;
+          const count = counts[item.id];
           return (
             <button
               key={item.id}
@@ -58,16 +64,16 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
                 )}
               />
               <span className="flex-1 font-medium">{item.label}</span>
-              {typeof item.count === "number" && (
+              {typeof count === "number" && (
                 <span
                   className={cn(
-                    "rounded-md px-1.5 py-0.5 font-mono text-[10px]",
+                    "rounded-md px-1.5 py-0.5 font-mono text-[10px] transition-colors duration-300",
                     isActive
                       ? "bg-steel-700/40 text-steel-300"
                       : "bg-base-800 text-ink-500"
                   )}
                 >
-                  {item.count}
+                  {count}
                 </span>
               )}
               {isActive && <ChevronRight className="h-3.5 w-3.5 text-steel-500" />}
@@ -86,6 +92,9 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
 }
 
 function SidebarContext({ active }: { active: string }) {
+  const { survivorConfirmed, hazardsVisible, missionStatus, primaryDetection } = useSimulation();
+  const visibleHazards = hazards.filter((h) => hazardsVisible.includes(h.id));
+
   switch (active) {
     case "mission-queue":
       return (
@@ -118,34 +127,40 @@ function SidebarContext({ active }: { active: string }) {
       return (
         <div className="flex flex-col gap-2 animate-fade-in">
           <p className="px-0.5 text-[10px] font-semibold uppercase tracking-widest text-ink-500">
-            Detected &middot; {survivors.length}
+            Detected &middot; {survivorConfirmed ? 1 : 0}
           </p>
-          {survivors.map((s) => (
-            <div key={s.id} className="rounded-lg border border-border bg-base-850/60 p-2.5">
+          {survivorConfirmed ? (
+            <div className="rounded-lg border border-moss-500/30 bg-base-850/60 p-2.5 animate-fade-in">
               <div className="flex items-center justify-between">
-                <p className="text-[12.5px] font-medium text-ink-200">{s.label}</p>
-                <span
-                  className={cn(
-                    "font-mono text-[11px]",
-                    s.confidence > 85 ? "text-moss-400" : s.confidence > 60 ? "text-amber-400" : "text-ink-500"
-                  )}
-                >
-                  {s.confidence}%
+                <p className="text-[12.5px] font-medium text-ink-200">Confirmed Survivor</p>
+                <span className="font-mono text-[11px] text-moss-400">
+                  {primaryDetection?.confidence ?? 96}%
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] text-ink-500">{s.location}</p>
+              <p className="mt-0.5 text-[11px] text-ink-500">Sector B &middot; Grid B-7</p>
+              <p className="mt-1.5 text-[10.5px] text-amber-300">Operator verification recommended</p>
             </div>
-          ))}
+          ) : (
+            <p className="text-[12px] leading-relaxed text-ink-500">
+              No survivors confirmed yet. Detections will appear here once combined
+              confidence clears the verification threshold.
+            </p>
+          )}
         </div>
       );
     case "hazards":
       return (
         <div className="flex flex-col gap-2 animate-fade-in">
           <p className="px-0.5 text-[10px] font-semibold uppercase tracking-widest text-ink-500">
-            Hazard Zones &middot; {hazards.length}
+            Hazard Zones &middot; {visibleHazards.length}
           </p>
-          {hazards.map((h) => (
-            <div key={h.id} className="rounded-lg border border-border bg-base-850/60 p-2.5">
+          {visibleHazards.length === 0 && (
+            <p className="text-[12px] leading-relaxed text-ink-500">
+              No hazards mapped yet in this mission.
+            </p>
+          )}
+          {visibleHazards.map((h) => (
+            <div key={h.id} className="rounded-lg border border-border bg-base-850/60 p-2.5 animate-fade-in">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[12.5px] text-ink-200">{h.label}</p>
                 <Badge
@@ -212,7 +227,9 @@ function SidebarContext({ active }: { active: string }) {
           </div>
           <div className="rounded-lg border border-border bg-base-850/60 p-3">
             <p className="text-ink-500 text-[11px] uppercase tracking-widest mb-1">Speed</p>
-            <p className="font-mono text-lg text-ink-100">0.62 m/s</p>
+            <p className="font-mono text-lg text-ink-100">
+              {missionStatus === "standby" || missionStatus === "complete" ? "0.00 m/s" : "0.62 m/s"}
+            </p>
           </div>
           <div className="rounded-lg border border-border bg-base-850/60 p-3">
             <p className="text-ink-500 text-[11px] uppercase tracking-widest mb-1">Terrain</p>
@@ -222,15 +239,16 @@ function SidebarContext({ active }: { active: string }) {
       );
     default:
       return (
-        <div className="flex flex-col gap-2 text-[12.5px] text-ink-400 animate-fade-in">
+        <div className="flex flex-col gap-3 text-[12.5px] text-ink-400 animate-fade-in">
           <p className="leading-relaxed">
             Unit-07 is autonomously executing the active mission plan. AI reasoning and
             detections stream in the panel on the right.
           </p>
-          <div className="mt-1 rounded-lg border border-border bg-base-850/60 p-3">
+          <div className="rounded-lg border border-border bg-base-850/60 p-3">
             <p className="text-ink-500 text-[11px] uppercase tracking-widest mb-1">Current Objective</p>
             <p className="text-ink-200">Search Sector B, prioritize thermal signatures</p>
           </div>
+          <SafetyPanel />
         </div>
       );
   }

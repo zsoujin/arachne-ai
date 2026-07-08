@@ -1,4 +1,11 @@
-export type MissionStatus = "active" | "paused" | "returning" | "idle";
+export type MissionStatus =
+  | "standby"
+  | "initializing"
+  | "exploring"
+  | "target-detected"
+  | "complete";
+export type DetectionStage = "thermal" | "possible" | "crosscheck" | "confirmed";
+export type CameraStage = "idle" | "connecting-1" | "connecting-2" | "connecting-3" | "online";
 export type RobotStatus = "operational" | "degraded" | "critical" | "offline";
 export type ConnectionQuality = "excellent" | "good" | "poor" | "lost";
 

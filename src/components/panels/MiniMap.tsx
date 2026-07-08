@@ -1,15 +1,15 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Map } from "lucide-react";
-import { survivors, hazards } from "@/data/mockData";
-import { robotWaypoints } from "@/data/simulationPool";
+import { hazards } from "@/data/mockData";
 import { useSimulation } from "@/state/SimulationContext";
 
-const pathD = robotWaypoints
-  .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x},${p.y}`)
-  .join(" ");
-
 export function MiniMap() {
-  const { robotPos } = useSimulation();
+  const { robotPos, trail, hazardsVisible, survivorConfirmed, survivorLocation } = useSimulation();
+
+  const trailD = trail.length > 1
+    ? trail.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x},${p.y}`).join(" ")
+    : "";
+  const visibleHazards = hazards.filter((h) => hazardsVisible.includes(h.id));
 
   return (
     <Card className="flex h-full flex-col">
@@ -30,13 +30,14 @@ export function MiniMap() {
               <line key={`h${i}`} x1={0} y1={(i + 1) * 10} x2={100} y2={(i + 1) * 10} stroke="#1c2026" strokeWidth="0.3" />
             ))}
 
-            {/* hazard zones */}
-            {hazards.map((h) => (
+            {/* hazard zones, revealed progressively */}
+            {visibleHazards.map((h) => (
               <circle
                 key={h.id}
                 cx={h.x}
                 cy={h.y}
                 r={h.radius}
+                className="animate-fade-in"
                 fill={h.severity === "high" ? "#c1454a22" : "#d1963f1f"}
                 stroke={h.severity === "high" ? "#e0555b" : "#e0ac5f"}
                 strokeWidth="0.5"
@@ -44,16 +45,19 @@ export function MiniMap() {
               />
             ))}
 
-            {/* patrol path */}
-            <path d={pathD} fill="none" stroke="#6f97cd" strokeWidth="1" strokeDasharray="2 1.4" opacity="0.5" />
+            {/* explored path, grows as the robot moves */}
+            {trailD && (
+              <path d={trailD} fill="none" stroke="#6f97cd" strokeWidth="1" opacity="0.65" />
+            )}
 
-            {/* survivors */}
-            {survivors.map((s) => (
-              <g key={s.id}>
-                <circle cx={s.x} cy={s.y} r="2.6" fill="#4e9c7833" stroke="#6cb794" strokeWidth="0.6" />
-                <circle cx={s.x} cy={s.y} r="0.9" fill="#6cb794" />
+            {/* survivor marker, appears only once confirmed */}
+            {survivorConfirmed && (
+              <g className="animate-fade-in">
+                <circle cx={survivorLocation.x} cy={survivorLocation.y} r="4" fill="none" stroke="#6cb794" strokeWidth="0.5" opacity="0.6" className="animate-ping" />
+                <circle cx={survivorLocation.x} cy={survivorLocation.y} r="2.6" fill="#4e9c7833" stroke="#6cb794" strokeWidth="0.6" />
+                <circle cx={survivorLocation.x} cy={survivorLocation.y} r="0.9" fill="#6cb794" />
               </g>
-            ))}
+            )}
 
             {/* robot position, live */}
             <g transform={`translate(${robotPos.x},${robotPos.y})`}>

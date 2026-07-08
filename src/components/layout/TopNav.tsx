@@ -1,8 +1,21 @@
-import { Activity, BatteryMedium, BatteryLow, Wifi, WifiOff } from "lucide-react";
+import type { ElementType } from "react";
+import { Activity, BatteryMedium, BatteryLow, Wifi, WifiOff, Loader2, CheckCircle2, Radar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatClock } from "@/lib/utils";
 import { useLiveClock } from "@/hooks/useMissionClock";
 import { useSimulation } from "@/state/SimulationContext";
+import type { MissionStatus } from "@/types";
+
+const statusMeta: Record<
+  MissionStatus,
+  { label: string; variant: "neutral" | "active" | "warning" | "success"; icon: ElementType }
+> = {
+  standby: { label: "Standby", variant: "neutral", icon: Activity },
+  initializing: { label: "Initializing", variant: "active", icon: Loader2 },
+  exploring: { label: "Exploring", variant: "active", icon: Radar },
+  "target-detected": { label: "Target Detected", variant: "warning", icon: Activity },
+  complete: { label: "Mission Complete", variant: "success", icon: CheckCircle2 },
+};
 
 function SignalBars({ level }: { level: number }) {
   return (
@@ -26,7 +39,7 @@ function SignalBars({ level }: { level: number }) {
 
 export function TopNav() {
   const now = useLiveClock();
-  const { battery, signalLevel, signalDbm, robotStatus } = useSimulation();
+  const { battery, signalLevel, signalDbm, robotStatus, missionStatus } = useSimulation();
 
   const batteryLow = battery < 25;
   const BatteryIcon = batteryLow ? BatteryLow : BatteryMedium;
@@ -60,9 +73,19 @@ export function TopNav() {
       </div>
 
       <div className="hidden items-center gap-2.5 md:flex">
-        <Badge variant="active">
-          <Activity className="h-3 w-3" />
-          Mission Active
+        <Badge variant={statusMeta[missionStatus].variant} className="transition-colors duration-500">
+          {(() => {
+            const StatusIcon = statusMeta[missionStatus].icon;
+            return (
+              <StatusIcon
+                className={cn(
+                  "h-3 w-3",
+                  missionStatus === "initializing" && "animate-spin"
+                )}
+              />
+            );
+          })()}
+          {statusMeta[missionStatus].label}
         </Badge>
         <Badge
           variant={robotStatus === "operational" ? "success" : "warning"}

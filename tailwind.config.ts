@@ -83,12 +83,18 @@ export default {
           "0%": { backgroundPosition: "-400px 0" },
           "100%": { backgroundPosition: "400px 0" },
         },
+        "lock-pulse": {
+          "0%": { transform: "scale(1.1)", opacity: "0.3" },
+          "55%": { transform: "scale(0.98)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "pulse-dot": "pulse-dot 1.6s ease-in-out infinite",
         scan: "scan 4s linear infinite",
         "fade-in": "fade-in 0.25s ease-out",
         shimmer: "shimmer 1.6s infinite linear",
+        "lock-pulse": "lock-pulse 0.55s cubic-bezier(0.34,1.56,0.64,1)",
       },
     },
   },
