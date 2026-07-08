@@ -8,31 +8,118 @@ import {
   ShieldAlert,
   WifiOff,
   Aperture,
+  SignalHigh,
+  SignalMedium,
+  SignalLow,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn, formatClock, formatDuration } from "@/lib/utils";
 import { useSimulation } from "@/state/SimulationContext";
-import type { DetectionStage } from "@/types";
 
-const ambientBoxes = [
-  { id: "bb-2", x: 30, y: 55, w: 18, h: 14, label: "Unstable concrete", confidence: 88 },
-  { id: "bb-3", x: 76, y: 48, w: 10, h: 10, label: "Debris cluster", confidence: 74 },
+// Simulated mission playback — an ordered list of camera frame filenames.
+// No real image assets exist for these; they are referenced only. If they
+// fail to load, the synthetic scene (grid/vignette/noise/scanlines) behind
+// them still reads as a live feed. Fully self-contained React state, zero
+// backend, AI, or network dependency.
+const missionFrames = [
+  "frame1.jpg",
+  "frame2.jpg",
+  "frame3.jpg",
+  "frame4.jpg",
+  "frame5.jpg",
 ];
 
-const detectionStyle: Record<DetectionStage, string> = {
-  thermal: "border-amber-500/70 text-amber-300 border-dashed",
-  possible: "border-amber-400 text-amber-300",
-  crosscheck: "border-steel-400 text-steel-300",
-  confirmed: "border-moss-400 text-moss-300",
-};
+const FRAME_DURATION_MS = 8000;
 
-const detectionLabel: Record<DetectionStage, string> = {
-  thermal: "Thermal anomaly",
-  possible: "Possible survivor",
-  crosscheck: "Cross-checking",
-  confirmed: "Human detected",
-};
+interface FrameLogEvent {
+  /** ms offset within the frame's 8s window */
+  atMs: number;
+  message: string;
+}
+
+interface FrameDetection {
+  label: string;
+  style: string;
+  box: { x: number; y: number; w: number; h: number };
+  confidenceStart: number;
+  confidenceEnd: number;
+  locked?: boolean;
+}
+
+interface FrameScriptEntry {
+  logs: FrameLogEvent[];
+  detection?: FrameDetection;
+}
+
+// The mission script driving both the on-screen event caption and the
+// object-detection overlay, one entry per frame in `missionFrames`.
+const frameScript: FrameScriptEntry[] = [
+  {
+    // Frame 1 — Mission started / Scanning environment
+    logs: [
+      { atMs: 200, message: "Mission started" },
+      { atMs: 4200, message: "Scanning environment" },
+    ],
+  },
+  {
+    // Frame 2 — Obstacle detected / Route replanned
+    logs: [
+      { atMs: 200, message: "Obstacle detected" },
+      { atMs: 4200, message: "Route replanned" },
+    ],
+    detection: {
+      label: "Obstacle",
+      style: "border-amber-500/70 text-amber-300",
+      box: { x: 32, y: 46, w: 24, h: 22 },
+      confidenceStart: 79,
+      confidenceEnd: 79,
+    },
+  },
+  {
+    // Frame 3 — Thermal anomaly detected / Cross-checking thermal data
+    logs: [
+      { atMs: 200, message: "Thermal anomaly detected" },
+      { atMs: 4200, message: "Cross-checking thermal data" },
+    ],
+    detection: {
+      label: "Thermal anomaly",
+      style: "border-amber-500/70 text-amber-300 border-dashed",
+      box: { x: 56, y: 28, w: 16, h: 24 },
+      confidenceStart: 37,
+      confidenceEnd: 54,
+    },
+  },
+  {
+    // Frame 4 — Possible survivor detected / Confidence increases gradually
+    logs: [
+      { atMs: 200, message: "Possible survivor detected" },
+      { atMs: 3600, message: "Confidence increasing" },
+    ],
+    detection: {
+      label: "Possible survivor",
+      style: "border-steel-400 text-steel-300",
+      box: { x: 58, y: 22, w: 15, h: 27 },
+      confidenceStart: 52,
+      confidenceEnd: 91,
+    },
+  },
+  {
+    // Frame 5 — Mission complete / Operator notified
+    logs: [
+      { atMs: 200, message: "Mission complete" },
+      { atMs: 4000, message: "Operator notified" },
+    ],
+    detection: {
+      label: "Human detected",
+      style: "border-moss-400 text-moss-300",
+      box: { x: 58, y: 22, w: 15, h: 27 },
+      confidenceStart: 96,
+      confidenceEnd: 96,
+      locked: true,
+    },
+  },
+];
 
 /**
  * Renders animated, low-res sensor grain onto a small offscreen canvas and
@@ -95,7 +182,6 @@ export function CameraFeed() {
     elapsedSeconds,
     cameraStage,
     cameraBootLines,
-    primaryDetection,
     sensorOcclusion,
     signalLevel,
     signalDbm,
@@ -103,10 +189,67 @@ export function CameraFeed() {
   const [mode, setMode] = useState<"visual" | "thermal">("visual");
   const [localGlitch, setLocalGlitch] = useState(false);
 
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [frameElapsed, setFrameElapsed] = useState(0);
+  const [playbackDone, setPlaybackDone] = useState(false);
+  const [failedFrames, setFailedFrames] = useState<Set<string>>(new Set());
+  const [now, setNow] = useState(() => new Date());
+
   const bootIndex =
     cameraStage === "connecting-1" ? 0 : cameraStage === "connecting-2" ? 1 : cameraStage === "connecting-3" ? 2 : 3;
   const showBoot = cameraStage !== "idle" && cameraStage !== "online";
   const showFeed = cameraStage === "online";
+
+  // Live timestamp, ticks regardless of mission state.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Mission playback: advance through missionFrames every 8s, driven by a
+  // single interval that also powers the synced log caption and the
+  // gradually-rising confidence readout. Freezes on the final frame once
+  // the script completes rather than looping.
+  useEffect(() => {
+    if (!showFeed) return;
+    setFrameIndex(0);
+    setFrameElapsed(0);
+    setPlaybackDone(false);
+
+    let idx = 0;
+    let frameStart = Date.now();
+
+    const id = setInterval(() => {
+      const elapsed = Date.now() - frameStart;
+      if (elapsed >= FRAME_DURATION_MS) {
+        if (idx < missionFrames.length - 1) {
+          idx += 1;
+          frameStart = Date.now();
+          setFrameIndex(idx);
+          setFrameElapsed(0);
+        } else {
+          setFrameElapsed(FRAME_DURATION_MS);
+          setPlaybackDone(true);
+          clearInterval(id);
+        }
+      } else {
+        setFrameElapsed(elapsed);
+      }
+    }, 150);
+
+    return () => clearInterval(id);
+  }, [showFeed]);
+
+  const currentScript = frameScript[frameIndex];
+  const activeLog =
+    [...currentScript.logs].reverse().find((l) => l.atMs <= frameElapsed) ?? currentScript.logs[0];
+  const detection = currentScript.detection;
+  const confidenceProgress = detection ? Math.min(1, frameElapsed / FRAME_DURATION_MS) : 0;
+  const confidenceNow = detection
+    ? Math.round(detection.confidenceStart + (detection.confidenceEnd - detection.confidenceStart) * confidenceProgress)
+    : 0;
+
+  const SignalIcon = signalLevel >= 4 ? SignalHigh : signalLevel === 3 ? SignalMedium : SignalLow;
 
   // Occasional signal interference, independent of any single upstream
   // system: brief static/glitch bursts every ~6-15s, on top of whatever the
@@ -223,6 +366,26 @@ export function CameraFeed() {
                 <polygon points="380,400 470,300 560,320 610,400" fill="#101010" />
               </svg>
 
+              {/* Simulated mission frame playback — crossfades between
+                  entries in `missionFrames` every 8s. No real image files
+                  are bundled; if a frame fails to load it's simply hidden,
+                  leaving the synthetic scene above/below as the visible
+                  "footage". */}
+              {mode === "visual" && (
+                <div className="absolute inset-0">
+                  {missionFrames.map((src, i) => (
+                    <img
+                      key={src}
+                      src={src}
+                      alt=""
+                      onError={() => setFailedFrames((prev) => new Set(prev).add(src))}
+                      className="absolute inset-0 h-full w-full object-cover grayscale contrast-125 brightness-[0.65] transition-opacity duration-[900ms] ease-in-out"
+                      style={{ opacity: i === frameIndex && !failedFrames.has(src) ? 1 : 0 }}
+                    />
+                  ))}
+                </div>
+              )}
+
               {/* Vignette */}
               <div
                 className="absolute inset-0"
@@ -259,43 +422,47 @@ export function CameraFeed() {
               )}
             </div>
 
-            {/* ambient persistent detections */}
-            {ambientBoxes.map((b) => (
+            {/* Object detection box + confidence/detection label, driven by
+                the current frame's mission script entry */}
+            {detection && (
               <div
-                key={b.id}
-                className="absolute rounded-[3px] border border-steel-400 text-steel-300 animate-fade-in"
-                style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%`, height: `${b.h}%` }}
-              >
-                <span className="absolute -top-5 left-0 whitespace-nowrap rounded bg-base-950/85 px-1.5 py-[1px] font-mono text-[10px]">
-                  {b.label} &middot; {b.confidence}%
-                </span>
-              </div>
-            ))}
-
-            {/* live evolving primary detection */}
-            {primaryDetection && (
-              <div
-                key={primaryDetection.stage}
+                key={frameIndex}
                 className={cn(
-                  "absolute rounded-[3px] border-[1.5px] transition-all duration-700",
-                  detectionStyle[primaryDetection.stage],
-                  primaryDetection.stage === "confirmed"
-                    ? "bracket-corners animate-lock-pulse"
-                    : "animate-fade-in"
+                  "absolute rounded-[3px] border-[1.5px] transition-all duration-500 animate-fade-in",
+                  detection.style,
+                  detection.locked && "bracket-corners animate-lock-pulse"
                 )}
-                style={{ left: "58%", top: "22%", width: "14%", height: "26%" }}
+                style={{
+                  left: `${detection.box.x}%`,
+                  top: `${detection.box.y}%`,
+                  width: `${detection.box.w}%`,
+                  height: `${detection.box.h}%`,
+                }}
               >
-                {primaryDetection.stage === "confirmed" && (
+                {detection.locked && (
                   <>
                     <div className="bc-tr" />
                     <div className="bc-bl" />
                   </>
                 )}
                 <span className="absolute -top-5 left-0 whitespace-nowrap rounded bg-base-950/85 px-1.5 py-[1px] font-mono text-[10px]">
-                  {detectionLabel[primaryDetection.stage]} &middot; {primaryDetection.confidence}%
+                  {detection.label} &middot; {confidenceNow}%
                 </span>
               </div>
             )}
+
+            {/* Mission event caption, synchronized with the frame/log script */}
+            <div className="absolute inset-x-0 bottom-14 flex justify-start px-3">
+              <div
+                key={`${frameIndex}-${activeLog.message}`}
+                className="animate-fade-in rounded-md bg-base-950/70 px-2.5 py-1 font-mono text-[11px] tracking-wide text-steel-300 backdrop-blur-sm"
+              >
+                {activeLog.message}
+                {playbackDone && frameIndex === missionFrames.length - 1 && (
+                  <span className="ml-2 text-ink-500">&middot; playback complete</span>
+                )}
+              </div>
+            </div>
           </>
         )}
 
@@ -317,6 +484,11 @@ export function CameraFeed() {
               <div className="rounded-md bg-base-950/70 px-2 py-1 font-mono text-[11px] text-ink-300 backdrop-blur-sm tabular-nums">
                 {formatDuration(elapsedSeconds)}
               </div>
+              {showFeed && (
+                <div className="rounded-md bg-base-950/70 px-2 py-1 font-mono text-[11px] text-ink-400 backdrop-blur-sm tabular-nums">
+                  {formatClock(now)}
+                </div>
+              )}
               {showFeed && interference && (
                 <div className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 backdrop-blur-sm animate-pulse-dot">
                   <WifiOff className="h-3 w-3 text-amber-400" />
@@ -333,6 +505,17 @@ export function CameraFeed() {
 
           {showFeed && (
             <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-md bg-base-950/70 px-2 py-1 backdrop-blur-sm">
+                <SignalIcon className={cn("h-3 w-3", signalLevel <= 2 ? "text-amber-400" : "text-steel-300")} />
+                <span
+                  className={cn(
+                    "font-mono text-[11px] tabular-nums",
+                    signalLevel <= 2 ? "text-amber-300" : "text-ink-300"
+                  )}
+                >
+                  {signalDbm} dBm
+                </span>
+              </div>
               <button
                 onClick={() => setMode("visual")}
                 className={cn(
@@ -369,7 +552,7 @@ export function CameraFeed() {
               <span className="font-mono text-[11px] text-ink-200 tabular-nums">
                 F{String(frameCount).padStart(6, "0")}
               </span>
-              {primaryDetection?.stage === "confirmed" && (
+              {detection?.locked && (
                 <>
                   <span className="h-3 w-px bg-border" />
                   <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />
@@ -378,9 +561,6 @@ export function CameraFeed() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={signalLevel <= 2 ? "warning" : "outline"} className="bg-base-950/70 backdrop-blur-sm tabular-nums">
-                {signalDbm} dBm
-              </Badge>
               <Badge variant="outline" className="bg-base-950/70 backdrop-blur-sm">
                 720p &middot; MONO &middot; 24fps
               </Badge>
